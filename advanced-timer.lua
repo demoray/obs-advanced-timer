@@ -12,6 +12,8 @@ settings_     = nil
 orig_time     = 0
 cur_time      = 0
 cur_ns        = 0
+members		  = 1
+hourly_rate	  = 15.0
 up_when_finished = false
 up            = false
 paused        = false
@@ -44,6 +46,21 @@ function delta_time(year, month, day, hour, minute, second)
 	end
 
 	return seconds * 1000000000
+end
+
+function set_cost_text(ns)
+	local ms = math.floor(ns/ 1000000)
+	local current_spend = ms / 3600000 * members * hourly_rate
+	local text = string.format("This meeting as cost $%.02f thus far", current_spend)
+
+	local source = obs.obs_get_source_by_name(source_name)
+	if source ~= nil then
+		local settings = obs.obs_data_create()
+		obs.obs_data_set_string(settings, "text", text)
+		obs.obs_source_update(source, settings)
+		obs.obs_data_release(settings)
+		obs.obs_source_release(source)
+	end
 end
 
 function set_time_text(ns, text)
@@ -178,10 +195,15 @@ function script_tick(sec)
 
 	local delta = obs.os_gettime_ns() - orig_time
 
-	if mode == "Countup" or mode == "Streaming timer" or mode == "Recording timer" or up == true then
+	if mode == "Meeting cost" or mode == "Countup" or mode == "Streaming timer" or mode == "Recording timer" or up == true then
 		cur_ns = cur_time + delta
 	else
 		cur_ns = cur_time - delta
+	end
+
+	if mode == "Meeting cost" then
+		set_cost_text(cur_ns)
+		return
 	end
 
 	if cur_ns < 1 and (mode == "Countdown" or mode == "Specific time" or mode == "Specific date and time") then
@@ -306,6 +328,8 @@ function settings_modified(props, prop, settings)
 	local mode_setting = obs.obs_data_get_string(settings, "mode")
 	local p_duration = obs.obs_properties_get(props, "duration")
 	local p_offset = obs.obs_properties_get(props, "offset")
+	local p_hourly_rate = obs.obs_properties_get(props, "hourly_rate")
+	local p_members = obs.obs_properties_get(props, "members")
 	local p_year = obs.obs_properties_get(props, "year")
 	local p_month = obs.obs_properties_get(props, "month")
 	local p_day = obs.obs_properties_get(props, "day")
@@ -319,13 +343,38 @@ function settings_modified(props, prop, settings)
 	local up_finished = obs.obs_properties_get(props, "countup_countdown_finished")
 	local switch_to = obs.obs_properties_get(props, "switch_to_scene")
 	local next_scene = obs.obs_properties_get(props, "next_scene")
+	local p_format = obs.obs_properties_get(props, "format")
 
 	local enable_scene_switch = obs.obs_data_get_bool(settings, "switch_to_scene")
 	obs.obs_property_set_enabled(next_scene, enable_scene_switch)
 
-	if (mode_setting == "Countdown") then
+	members = obs.obs_data_get_int(settings, "members")
+	hourly_rate = obs.obs_data_get_double(settings, "hourly_rate")
+
+	if (mode_setting == "Meeting cost") then
+		obs.obs_property_set_visible(p_duration, false)
+		obs.obs_property_set_visible(p_offset, true)
+		obs.obs_property_set_visible(p_hourly_rate, true)
+		obs.obs_property_set_visible(p_members, true)
+		obs.obs_property_set_visible(p_year, false)
+		obs.obs_property_set_visible(p_month, false)
+		obs.obs_property_set_visible(p_day, false)
+		obs.obs_property_set_visible(p_hour, false)
+		obs.obs_property_set_visible(p_minutes, false)
+		obs.obs_property_set_visible(p_seconds, false)
+		obs.obs_property_set_visible(p_stop_text, false)
+		obs.obs_property_set_visible(button_pause, true)
+		obs.obs_property_set_visible(button_reset, true)
+		obs.obs_property_set_visible(p_a_mode, false)
+		obs.obs_property_set_visible(up_finished, false)
+		obs.obs_property_set_visible(switch_to, false)
+		obs.obs_property_set_visible(next_scene, false)
+		obs.obs_property_set_visible(p_format, false)
+	elseif (mode_setting == "Countdown") then
 		obs.obs_property_set_visible(p_duration, true)
 		obs.obs_property_set_visible(p_offset, false)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, false)
 		obs.obs_property_set_visible(p_month, false)
 		obs.obs_property_set_visible(p_day, false)
@@ -339,9 +388,12 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, true)
 		obs.obs_property_set_visible(switch_to, true)
 		obs.obs_property_set_visible(next_scene, true)
+		obs.obs_property_set_visible(p_format, true)
 	elseif (mode_setting == "Countup") then
 		obs.obs_property_set_visible(p_duration, false)
 		obs.obs_property_set_visible(p_offset, true)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, false)
 		obs.obs_property_set_visible(p_month, false)
 		obs.obs_property_set_visible(p_day, false)
@@ -355,9 +407,12 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, false)
 		obs.obs_property_set_visible(switch_to, false)
 		obs.obs_property_set_visible(next_scene, false)
+		obs.obs_property_set_visible(p_format, true)
 	elseif (mode_setting == "Specific time") then
 		obs.obs_property_set_visible(p_duration, false)
 		obs.obs_property_set_visible(p_offset, false)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, false)
 		obs.obs_property_set_visible(p_month, false)
 		obs.obs_property_set_visible(p_day, false)
@@ -371,9 +426,12 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, true)
 		obs.obs_property_set_visible(switch_to, true)
 		obs.obs_property_set_visible(next_scene, true)
+		obs.obs_property_set_visible(p_format, true)
 	elseif (mode_setting == "Specific date and time") then
 		obs.obs_property_set_visible(p_duration, false)
 		obs.obs_property_set_visible(p_offset, false)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, true)
 		obs.obs_property_set_visible(p_month, true)
 		obs.obs_property_set_visible(p_day, true)
@@ -387,9 +445,12 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, true)
 		obs.obs_property_set_visible(switch_to, true)
 		obs.obs_property_set_visible(next_scene, true)
+		obs.obs_property_set_visible(p_format, true)
 	elseif (mode_setting == "Streaming timer") then
 		obs.obs_property_set_visible(p_duration, false)
 		obs.obs_property_set_visible(p_offset, false)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, false)
 		obs.obs_property_set_visible(p_month, false)
 		obs.obs_property_set_visible(p_day, false)
@@ -403,9 +464,12 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, false)
 		obs.obs_property_set_visible(switch_to, false)
 		obs.obs_property_set_visible(next_scene, false)
+		obs.obs_property_set_visible(p_format, true)
 	elseif (mode_setting == "Recording timer") then
 		obs.obs_property_set_visible(p_duration, false)
 		obs.obs_property_set_visible(p_offset, false)
+		obs.obs_property_set_visible(p_hourly_rate, false)
+		obs.obs_property_set_visible(p_members, false)
 		obs.obs_property_set_visible(p_year, false)
 		obs.obs_property_set_visible(p_month, false)
 		obs.obs_property_set_visible(p_day, false)
@@ -419,6 +483,7 @@ function settings_modified(props, prop, settings)
 		obs.obs_property_set_visible(up_finished, false)
 		obs.obs_property_set_visible(switch_to, false)
 		obs.obs_property_set_visible(next_scene, false)
+		obs.obs_property_set_visible(p_format, true)
 	end
 
 	return true
@@ -434,9 +499,12 @@ function script_properties()
 	obs.obs_property_list_add_string(p_mode, "Specific date and time", "specific_date_and_time")
 	obs.obs_property_list_add_string(p_mode, "Streaming timer", "stream")
 	obs.obs_property_list_add_string(p_mode, "Recording timer", "recording")
+	obs.obs_property_list_add_string(p_mode, "Meeting cost", "cost")
 	obs.obs_property_set_modified_callback(p_mode, settings_modified)
 
 	obs.obs_properties_add_int(props, "duration", "Countdown duration (seconds)", 1, 100000000, 1)
+	obs.obs_properties_add_float(props, "hourly_rate", "Average hourly rate", 1, 100000000, 1)
+	obs.obs_properties_add_int(props, "members", "Number of participants", 1, 100000000, 1)
 	obs.obs_properties_add_int(props, "offset", "Countup from (seconds)", 0, 100000000, 1)
 	obs.obs_properties_add_int(props, "year", "Year", 1971, 100000000, 1)
 	obs.obs_properties_add_int(props, "month", "Month (1-12)", 1, 12, 1)
@@ -499,6 +567,8 @@ function script_update(settings)
 	a_mode = obs.obs_data_get_string(settings, "a_mode")
 	source_name = obs.obs_data_get_string(settings, "source")
 	stop_text = obs.obs_data_get_string(settings, "stop_text")
+	members = obs.obs_data_get_int(settings, "members")
+	hourly_rate = obs.obs_data_get_double(settings, "hourly_rate")
 	local year = obs.obs_data_get_int(settings, "year")
 	local month = obs.obs_data_get_int(settings, "month")
 	local day = obs.obs_data_get_int(settings, "day")
@@ -512,7 +582,7 @@ function script_update(settings)
 
 	if mode == "Countdown" then
 		cur_time = obs.obs_data_get_int(settings, "duration") * 1000000000
-	elseif mode == "Countup" then
+	elseif mode == "Countup" or mode == "Meeting cost" then
 		cur_time = obs.obs_data_get_int(settings, "offset") * 1000000000
 	elseif mode == "Specific time" then
 		cur_time = delta_time(-1, -1, -1, hour, minute, second)
@@ -528,7 +598,11 @@ function script_update(settings)
 		global = true
 	end
 
-	set_time_text(cur_time, format)
+	if mode == "Meeting cost" then
+		set_cost_text(cur_time)
+	else
+		set_time_text(cur_time, format)
+	end
 
 	if global == false and paused == false then
 		start_timer()
@@ -541,6 +615,8 @@ function script_defaults(settings)
 	obs.obs_data_set_default_int(settings, "year", os.date("%Y", os.time()))
 	obs.obs_data_set_default_int(settings, "month", os.date("%m", os.time()))
 	obs.obs_data_set_default_int(settings, "day", os.date("%d", os.time()))
+	obs.obs_data_set_default_int(settings, "members", 1)
+	obs.obs_data_set_default_double(settings, "hourly_rate", 15.0)
 	obs.obs_data_set_default_string(settings, "stop_text", "Starting soon (tm)")
 	obs.obs_data_set_default_string(settings, "mode", "Countdown")
 	obs.obs_data_set_default_string(settings, "a_mode", "Global (timer always active)")

@@ -10,6 +10,7 @@ This is a Lua script for OBS Studio that sets a text source as a timer with adva
 - Streaming timer (starts timer when streaming starts)  
 - Recording timer (starts timer when recording start)  
 - With the countdown modes, there is an option to countup when the countdown is finished
+- Meeting Costs (how much has this meeting cost thus far?)
 
 **Formatting**  
 The default format is: %0H:%0m:%0s (00:00:00)  
