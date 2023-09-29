@@ -3,6 +3,15 @@ This is a Lua script for OBS Studio that sets a text source as a meeting cost ca
 
 Based off of [obs-advanced-timer](https://github.com/cg2121/obs-advanced-timer).
 
+## Using the script
+Inside OBS:
+1. Create a "Text (GDI)+" or "Text (Freetype2)" source, specifying the name
+2. In the "Tools" menu, select "Scripts".
+3. Select "+" under "Loaded scripts"
+4. Find & select "meeting-cost.lua"
+5. Configure as you wish
+6. Click start to start the timer
+
 ## Configuration
 * Initial Cost: Specify the initial cost for the meeting (Default: 0.0)
 * Average hourly rate: Average salary per hour for the participants (Default: 15.00)
@@ -18,3 +27,7 @@ The following hotkeys can be registered:
 * Pause/Resume
 * Increment meeting participants
 * Decrement meeting participants
+
+## Examples
+![basic scene](screenshots/scene.png)
+![configuration](screenshots/config.png)
