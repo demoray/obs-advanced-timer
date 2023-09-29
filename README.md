@@ -1,5 +1,5 @@
-# obs-meeting-costs
-This is a Lua script for OBS Studio that sets a text source as a cost calculator.
+# obs-meeting-cost
+This is a Lua script for OBS Studio that sets a text source as a meeting cost calculator.
 
 Based off of [obs-advanced-timer](https://github.com/cg2121/obs-advanced-timer).
 
