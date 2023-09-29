@@ -1,12 +1,17 @@
 obs           = obslua
 activated     = false
 current_spend = 0.0
-hourly_rate   = 15.0
+salary   = 100000.0
 initial_cost  = 0.0
 last_time 	  = 0
 participants  = 1
 source_name   = ""
+default_prefix = "This meeting has cost"
+default_suffix = "thus far."
+prefix = default_prefix
+suffix = default_suffix
 timer_active  = false
+show_participants = true
 
 hotkey_id_dec_participants = obs.OBS_INVALID_HOTKEY_ID
 hotkey_id_inc_participants = obs.OBS_INVALID_HOTKEY_ID
@@ -20,10 +25,22 @@ end
 function set_cost_text(ns)
 	if ns > 0 then
 		local ms = math.floor(ns/ 1000000)
-		local current_cost = ms / 3600000 * participants * hourly_rate
+		local current_cost = ms / 3600000 * participants * (salary / 49 / 40)
 		current_spend = current_spend + current_cost
 	end
-	local text = string.format("This meeting has cost $%.02f thus far (%d participants)", current_spend, participants)
+
+	local text = string.format("$%.02f", current_spend)
+	if not (prefix == "") then
+		text = string.format('%s %s', prefix, text)
+	end
+
+	if not (suffix == "") then
+		text = string.format('%s %s', text, suffix)
+	end
+
+	if show_participants then
+		text = string.format("%s (%d participants)", text, participants)
+	end
 
 	local source = obs.obs_get_source_by_name(source_name)
 	if source ~= nil then
@@ -46,7 +63,7 @@ function script_tick(sec)
 		since = now - last_time
 	end
 	last_time = now
-	
+
 	set_cost_text(since)
 end
 
@@ -107,10 +124,14 @@ end
 
 function script_properties()
 	local props = obs.obs_properties_create()
-	
+
 	obs.obs_properties_add_float(props, "initial_cost", "Initial Cost", 0, 100000000, 0)
-	obs.obs_properties_add_float(props, "hourly_rate", "Average hourly rate", 1, 100000000, 1)
+	obs.obs_properties_add_float(props, "salary", "Average salary", 1, 100000000, 1)
 	obs.obs_properties_add_int(props, "participants", "Number of participants", 1, 100000000, 1)
+	obs.obs_properties_add_bool(props, "show_participants", "Show the participant count")
+	obs.obs_properties_add_text(props, "text_prefix", "Text prefix", obs.OBS_TEXT_DEFAULT)
+	obs.obs_properties_add_text(props, "text_suffix", "Text suffix", obs.OBS_TEXT_DEFAULT)
+
 	local p = obs.obs_properties_add_list(props, "source", "Text source", obs.OBS_COMBO_TYPE_EDITABLE, obs.OBS_COMBO_FORMAT_STRING)
 	local sources = obs.obs_enum_sources()
 	if sources ~= nil then
@@ -133,30 +154,47 @@ end
 function script_update(settings)
 	source_name = obs.obs_data_get_string(settings, "source")
 	participants = obs.obs_data_get_int(settings, "participants")
-	hourly_rate = obs.obs_data_get_double(settings, "hourly_rate")
+	salary = obs.obs_data_get_double(settings, "salary")
 	initial_cost = obs.obs_data_get_double(settings, "initial_cost")
+	show_participants = obs.obs_data_get_bool(settings, "show_participants")
+	prefix = obs.obs_data_get_string(settings, "text_prefix")
+	suffix = obs.obs_data_get_string(settings, "text_suffix")
+
+	print("updating script")
+	print(string.format("suffix: %s prefix: %s done %s %s", suffix, prefix, 
+		obs.obs_data_get_default_string(settings, "text_prefix"),
+		obs.obs_data_get_string(settings, "text_prefix")
+	))
 end
 
 function script_defaults(settings)
-	obs.obs_data_set_default_int(settings, "offset", 0)
 	obs.obs_data_set_default_int(settings, "participants", 1)
-	obs.obs_data_set_default_double(settings, "hourly_rate", 15.0)
+	obs.obs_data_set_default_double(settings, "salary", 100000)
 	obs.obs_data_set_default_double(settings, "initial_cost", 0.0)
+	obs.obs_data_set_default_bool(settings, "show_participants", true)
+	obs.obs_data_set_default_string(settings, "text_prefix", default_prefix)
+	obs.obs_data_set_default_string(settings, "text_suffix", default_suffix)
+end
+
+function save_hotkey(settings, id, name)
+	local data = obs.obs_hotkey_save(id)
+	obs.obs_data_set_array(settings, name, data)
+	obs.obs_data_array_release(data)
 end
 
 function script_save(settings)
-	local hotkey_save_array_reset = obs.obs_hotkey_save(hotkey_id_reset)
-	local hotkey_save_array_pause = obs.obs_hotkey_save(hotkey_id_pause)
-	local hotkey_save_array_inc_participants = obs.obs_hotkey_save(hotkey_id_inc_participants)
-	local hotkey_save_array_dec_participants = obs.obs_hotkey_save(hotkey_id_dec_participants)
-	obs.obs_data_set_array(settings, "reset_hotkey", hotkey_save_array_reset)
-	obs.obs_data_set_array(settings, "pause_hotkey", hotkey_save_array_pause)
-	obs.obs_data_set_array(settings, "increment_participants", hotkey_save_array_inc_participants)
-	obs.obs_data_set_array(settings, "decrement_participants", hotkey_save_array_dec_participants)
-	obs.obs_data_array_release(hotkey_save_array_pause)
+	save_hotkey(settings, hotkey_id_reset, "reset_timer")
+	save_hotkey(settings, hotkey_id_pause, "pause_timer")
+	save_hotkey(settings, hotkey_id_inc_participants, "increment_participants")
+	save_hotkey(settings, hotkey_id_dec_participants, "decrement_participants")
+end
+
+function setup_hotkey(settings, name, text, func)
+	local hotkey_id = obs.obs_hotkey_register_frontend(name, text, reset)
+	local hotkey_save_array_reset = obs.obs_data_get_array(settings, name)
+	obs.obs_hotkey_load(hotkey_id_reset, hotkey_save_array_reset)
 	obs.obs_data_array_release(hotkey_save_array_reset)
-	obs.obs_data_array_release(hotkey_save_array_inc_participants)
-	obs.obs_data_array_release(hotkey_save_array_dec_participants)
+	return hotkey_id
 end
 
 function script_load(settings)
@@ -164,22 +202,10 @@ function script_load(settings)
 	obs.signal_handler_connect(sh, "source_activate", source_activated)
 	obs.signal_handler_connect(sh, "source_deactivate", source_deactivated)
 
-	hotkey_id_reset = obs.obs_hotkey_register_frontend("reset_timer", "Reset Timer", reset)
-	hotkey_id_pause = obs.obs_hotkey_register_frontend("pause_timer", "Pause/Resume", on_pause)
-	hotkey_id_inc_participants = obs.obs_hotkey_register_frontend("increment_participants", "increment meeting participants", inc_participants)
-	hotkey_id_dec_participants = obs.obs_hotkey_register_frontend("decrement_participants", "decrement meeting participants", dec_participants)
-	local hotkey_save_array_reset = obs.obs_data_get_array(settings, "reset_hotkey")
-	local hotkey_save_array_pause = obs.obs_data_get_array(settings, "pause_hotkey")
-	local hotkey_save_array_inc_participants = obs.obs_data_get_array(settings, "increment_participants")
-	local hotkey_save_array_dec_participants = obs.obs_data_get_array(settings, "decrement_participants")
-	obs.obs_hotkey_load(hotkey_id_reset, hotkey_save_array_reset)
-	obs.obs_hotkey_load(hotkey_id_pause, hotkey_save_array_pause)
-	obs.obs_hotkey_load(hotkey_id_inc_participants, hotkey_save_array_inc_participants)
-	obs.obs_hotkey_load(hotkey_id_dec_participants, hotkey_save_array_dec_participants)
-	obs.obs_data_array_release(hotkey_save_array_reset)
-	obs.obs_data_array_release(hotkey_save_array_pause)
-	obs.obs_data_array_release(hotkey_save_array_inc_participants)
-	obs.obs_data_array_release(hotkey_save_array_dec_participants)
+	hotkey_id_reset = setup_hotkey(settings, "reset_timer", "Reset Timer", reset)
+	hokey_id_pause = setup_hotkey(settings, "pause_timer", "Pause/Resume", on_pause)
+	hotkey_id_inc_participants = setup_hotkey(settings, "increment_participants", "Increment meeting participants", inc_participants)
+	hotkey_id_dec_participants = setup_hotkey(settings, "decrement_participants", "Decrement meeting participants", dec_participants)
 
 	script_update(settings)
 end
